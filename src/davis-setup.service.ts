@@ -254,6 +254,73 @@ export class DavisSetupService {
       );
     }
   }
+
+    /**
+   * Borra un objeto de Settings por objectId.
+   */
+  private async deleteSettingsObject(objectId: string) {
+    const url = `${this.getSettingsUrl()}/${encodeURIComponent(objectId)}`;
+    console.log(`🗑 Borrando settings object ${objectId} (${url})`);
+
+    await axios.delete(url, {
+      headers: this.getHeaders(),
+    });
+
+    console.log(`✅ Settings object ${objectId} borrado correctamente`);
+  }
+
+    /**
+   * Elimina la métrica de log y el detector Davis asociados a un flowName.
+   * - Métrica: log.<flowName>.ok.count
+   * - Davis:  Heartbeat <flowName> - Sin actividad
+   */
+  async deleteLogMetricAndAnomaly(flowName: string) {
+    try {
+      const metricKey = `log.${flowName}.ok.count`;
+      const anomalyTitle = `Heartbeat ${flowName} - Sin actividad`;
+
+      console.log('🧹 Eliminando configuración para flowName:', flowName);
+      console.log('   → metricKey:', metricKey);
+      console.log('   → anomalyTitle:', anomalyTitle);
+
+      // 1) buscar métrica
+      const metricId = await this.findExistingLogMetric(metricKey);
+      if (metricId) {
+        console.log(`🗑 Encontrada métrica ${metricKey} con objectId ${metricId}, borrando...`);
+        await this.deleteSettingsObject(metricId);
+      } else {
+        console.warn(`⚠ No se encontró métrica con key ${metricKey}, nada que borrar.`);
+      }
+
+      // 2) buscar anomaly detector
+      const anomalyId = await this.findExistingAnomalyDetector(anomalyTitle);
+      if (anomalyId) {
+        console.log(`🗑 Encontrado detector Davis "${anomalyTitle}" con objectId ${anomalyId}, borrando...`);
+        await this.deleteSettingsObject(anomalyId);
+      } else {
+        console.warn(`⚠ No se encontró detector Davis con título "${anomalyTitle}", nada que borrar.`);
+      }
+
+      return {
+        ok: true,
+        flowName,
+        metricKey,
+        deletedMetricId: metricId ?? null,
+        deletedAnomalyId: anomalyId ?? null,
+      };
+    } catch (err: any) {
+      console.error(
+        '❌ Error al borrar configuración en Dynatrace:',
+        err?.response?.data || err.message,
+      );
+      throw new HttpException(
+        err?.response?.data || 'Error al borrar configuración en Dynatrace',
+        500,
+      );
+    }
+  }
+
+
 }
 
 
