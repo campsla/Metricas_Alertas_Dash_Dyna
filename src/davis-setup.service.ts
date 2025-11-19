@@ -367,6 +367,135 @@ export class DavisSetupService {
     };
   }
 
+    /**
+   * Lista todas las métricas y anomaly detectors creados con el patrón:
+   * - Métricas:   log.<flowName>.ok.count
+   * - Anomalies:  Heartbeat <flowName> - Sin actividad
+   */
+  async listHeartbeats() {
+    try {
+      console.log('📋 Listando heartbeats (métricas + anomalies)...');
+
+      // 1) Traer TODAS las métricas de logs definidas
+      const metricsRes = await axios.get(this.getSettingsUrl(), {
+        headers: this.getHeaders(),
+        params: {
+          schemaIds: 'builtin:logmonitoring.schemaless-log-metric',
+          scope: 'environment',
+          pageSize: 500,
+        },
+      });
+
+      const metricItems = metricsRes.data.items ?? [];
+
+      const heartbeatMetrics = metricItems
+        .filter((item: any) => {
+          const key = item?.value?.key;
+          return (
+            typeof key === 'string' &&
+            key.startsWith('log.') &&
+            key.endsWith('.ok.count')
+          );
+        })
+        .map((item: any) => {
+          const key: string = item.value.key;
+          const flowName = key.substring(
+            'log.'.length,
+            key.length - '.ok.count'.length,
+          );
+
+          return {
+            flowName,
+            metricId: item.objectId,
+            metricKey: key,
+            metricEnabled: item.value.enabled,
+            metricQuery: item.value.query,
+          };
+        });
+
+      // 2) Traer TODOS los anomaly detectors
+      const anomalyRes = await axios.get(this.getSettingsUrl(), {
+        headers: this.getHeaders(),
+        params: {
+          schemaIds: 'builtin:davis.anomaly-detectors',
+          scope: 'environment',
+          pageSize: 500,
+        },
+      });
+
+      const anomalyItems = anomalyRes.data.items ?? [];
+
+      const heartbeatAnomalies = anomalyItems
+        .filter((item: any) => {
+          const title = item?.value?.title;
+          return (
+            typeof title === 'string' &&
+            title.startsWith('Heartbeat ') &&
+            title.endsWith(' - Sin actividad')
+          );
+        })
+        .map((item: any) => {
+          const title: string = item.value.title;
+          // "Heartbeat <flowName> - Sin actividad"
+          const inner = title.substring('Heartbeat '.length);
+          const flowName = inner.replace(' - Sin actividad', '');
+
+          return {
+            flowName,
+            anomalyId: item.objectId,
+            anomalyTitle: title,
+            anomalyEnabled: item.value.enabled,
+            anomalyDescription: item.value.description,
+          };
+        });
+
+      // 3) Merge por flowName
+      const map = new Map<
+        string,
+        {
+          flowName: string;
+          metricId?: string;
+          metricKey?: string;
+          metricEnabled?: boolean;
+          metricQuery?: string;
+          anomalyId?: string;
+          anomalyTitle?: string;
+          anomalyEnabled?: boolean;
+          anomalyDescription?: string;
+        }
+      >();
+
+      for (const m of heartbeatMetrics) {
+        map.set(m.flowName, { flowName: m.flowName, ...m });
+      }
+
+      for (const a of heartbeatAnomalies) {
+        const existing = map.get(a.flowName) ?? { flowName: a.flowName };
+        map.set(a.flowName, { ...existing, ...a });
+      }
+
+      const items = Array.from(map.values()).sort((a, b) =>
+        a.flowName.localeCompare(b.flowName),
+      );
+
+      return {
+        ok: true,
+        count: items.length,
+        items,
+      };
+    } catch (err: any) {
+      console.error(
+        '❌ Error al listar heartbeats en Dynatrace:',
+        err?.response?.data || err.message,
+      );
+      throw new HttpException(
+        err?.response?.data || 'Error al listar configuraciones en Dynatrace',
+        500,
+      );
+    }
+  }
+
+
 
 
 }
