@@ -1,6 +1,12 @@
-import { Body, Controller, Post, Delete, BadRequestException } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Post,
+  Delete,
+  Put,
+  BadRequestException,
+} from '@nestjs/common';
 import { DavisSetupService } from './davis-setup.service';
-
 
 @Controller('dynatrace')
 export class DynatraceController {
@@ -28,5 +34,20 @@ export class DynatraceController {
 
     return this.davisSetupService.deleteLogMetricAndAnomaly(flowName);
   }
+
+    @Put('heartbeat/metric')
+  async updateHeartbeatMetric(
+    @Body('flowName') flowName: string,
+    @Body('successLog') successLog: string,
+  ) {
+    if (!flowName || !successLog) {
+      throw new BadRequestException(
+        'flowName y successLog son obligatorios',
+      );
+    }
+
+    return this.davisSetupService.updateLogMetricQuery(flowName, successLog);
+  }
+
 
 }

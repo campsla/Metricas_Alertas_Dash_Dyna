@@ -320,6 +320,54 @@ export class DavisSetupService {
     }
   }
 
+    /**
+   * Actualiza la métrica de log para un flowName, cambiando solo el patrón de éxito (successLog),
+   * manteniendo el mismo metricKey: log.<flowName>.ok.count
+   */
+  async updateLogMetricQuery(flowName: string, successLogFragment: string) {
+    const metricKey = `log.${flowName}.ok.count`;
+    console.log(`🔄 Actualizando métrica ${metricKey}...`);
+
+    // 1) buscar el objeto de settings de esa métrica
+    const metricId = await this.findExistingLogMetric(metricKey);
+    if (!metricId) {
+      throw new HttpException(
+        `No se encontró una métrica con key ${metricKey}`,
+        404,
+      );
+    }
+
+    // 2) armar el body de actualización
+    const body = {
+      value: {
+        enabled: true,
+        key: metricKey,
+        measure: 'OCCURRENCE',
+        query: `matchesPhrase(content, "${successLogFragment}")`,
+        dimensions: [],
+      },
+    };
+
+    const url = `${this.getSettingsUrl()}/${encodeURIComponent(metricId)}`;
+    console.log('📤 PUT', url, 'body:', JSON.stringify(body, null, 2));
+
+    // 3) hacer el PUT al Settings API
+    const res = await axios.put(url, body, {
+      headers: this.getHeaders(),
+    });
+
+    console.log('✅ Métrica actualizada:', res.data);
+
+    return {
+      ok: true,
+      flowName,
+      metricKey,
+      metricId,
+      newSuccessLog: successLogFragment,
+    };
+  }
+
+
 
 }
 
